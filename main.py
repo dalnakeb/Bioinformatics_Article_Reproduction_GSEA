@@ -1,42 +1,65 @@
+import math
+
 import numpy as np
 import json
 from icecream import ic
-def enrichmentScore(rankedGeneExpr, pathwayGeneSets, phenotypesPerGene, p):
-    totalGeneFractionInPathway = 0
-    for i in range(len(rankedGeneExpr)):
-        if pathwayGeneSets.get(rankedGeneExpr[i][0]) is not None:
-            totalGeneFractionInPathway += abs(rankedGeneExpr[i][2]) ** p
-#    for i in range(len(rankedGeneExpr)):
- #       for j in range(len(rankedGeneExpr)):
+def enrichmentScore(rankedGeneExpr, pathwayGeneSets, p):
+    ERScorePerPathway = []
 
+    for pathwayGeneSetIndex in range(len(pathwayGeneSets)//10):
+        runningSum = 0
+        minER = math.inf
+        maxER = -math.inf
+        ERScorePerPathway.append([pathwayGeneSets[pathwayGeneSetIndex][0]])
+        for geneIndex in range(len(rankedGeneExpr)):
+            if rankedGeneExpr[geneIndex][0] in pathwayGeneSets[pathwayGeneSetIndex][1]:
+                runningSum += abs(rankedGeneExpr[geneIndex][2]**p)
+            else:
+                runningSum -= rankedGeneExpr[geneIndex][2]**p
 
+            minER = min(minER, runningSum)
+            maxER = max(maxER, runningSum)
+
+        if abs(minER) > abs(maxER):
+            ERScorePerPathway[pathwayGeneSetIndex].append(minER)
+        else:
+            ERScorePerPathway[pathwayGeneSetIndex].append(maxER)
+    ic(sorted(ERScorePerPathway)[-1])
 
 def rankGeneExpr(geneExpr, phenotypes):
     """
-    Rank the gene expression set first according to the metric chosen to rank every line, it's simply by subtracting the
-    averages of phenotype 2 from 1 and ordering the list accordingly in descendant order. Then order every line by value
-    and then by order of correlation to the phenotype.
+    Rank the gene expression set first according to the metric chosen to rank every line, it's simply by log of
+    subtracting the averages of phenotype 2 from 1 (change fold) and ordering the list accordingly in descendant order.
+    Then order every line by value and then by order of correlation to the phenotype.
 
     :param geneExpr: dictionary (gene name, list of expression values)
     :param phenotypes: a list of phenotypes indicating the phenotype of an expression in a certain position
-    :return: ranked list according to the metric described above, permuted phenotype lists that correlates with the
-    expression values.
+    :return: ranked list according to the metric described above [gene name, expression values, metric],
+    permuted phenotype lists that correlates with the expression values.
     """
+
+    # Correlation of genes with phenotype 1
     phenotypes = np.array(phenotypes)
     phenotypesCount = np.unique(phenotypes, return_counts=True)
     for i in range(len(geneExpr)):
-        geneExpr[i].append(np.sum(geneExpr[i][1][0:phenotypesCount[1][0]])/phenotypesCount[1][0] -
-                               np.sum(geneExpr[i][1][phenotypesCount[1][1]:])/phenotypesCount[1][1])  # phenotype 1-2
+        differentialGeneExpr = np.sum(geneExpr[i][1][0:phenotypesCount[1][0]])/phenotypesCount[1][0] - \
+                               np.sum(geneExpr[i][1][phenotypesCount[1][1]:])/phenotypesCount[1][1]
+        if differentialGeneExpr > 0:
+            geneExpr[i].append(math.log(differentialGeneExpr, 2))  # log(phenotype 1-2) fold change
+        elif differentialGeneExpr < 0:
+            geneExpr[i].append(-math.log(abs(differentialGeneExpr), 2))
+        else:
+            geneExpr[i].append(0)
 
     geneExpr.sort(key=lambda x: x[2], reverse=True)
 
+    # Order every gene samples by ascendant value of expression (and the phenotype list)
     phenotypesPerGene = []
     for i in range(len(geneExpr)):
         permutationOrder = np.argsort(geneExpr[i][1])
         geneExpr[i][1] = geneExpr[i][1][permutationOrder]
         phenotypesPerGene.append([])
         phenotypesPerGene[i].append(phenotypes[permutationOrder])
-
     return geneExpr, phenotypesPerGene
 
 
@@ -72,18 +95,18 @@ def fetchPathwayGeneSetsFromJSON(geneSetsFilePath):
     """
     Extracts gene sets from a json file given the filepath as an input
     :param geneSetsFilePath: filepath to a json file containing the gene sets
-    :return: a dictionary of {geneSet name: list of genes}
+    :return: a list of lists of [geneSet name, list of genes]
     """
     with open(geneSetsFilePath, 'r') as file:
         geneSetFileDataC1 = file.read()
     geneSetsJSON = json.loads(geneSetFileDataC1)
 
-    geneSets = {}
+    geneSets = []
     for geneSet, items in geneSetsJSON.items():
         getSetName = items["systematicName"]
         genesList = items["geneSymbols"]
-        geneSets[getSetName] = genesList
-    ic(geneSets.keys())
+        geneSets.append([getSetName, genesList])
+
     return geneSets
 
 
@@ -99,7 +122,7 @@ def fetchPhenotypes(phenotypesFilePath):
 
 if __name__ == '__main__':
     # Input files path
-    pathwaysGeneSetsFilePath = "Gene Expressions Datasets/Pathways Gene Sets/c1.all.v2023.2.Hs.json"
+    pathwaysGeneSetsFilePath = "Gene Expressions Datasets/Pathways Gene Sets/c2.all.v2023.2.Hs.json"
     geneExpressionsDatasetFilePath = "Gene Expressions Datasets/Lymphoblastoid Gender/Gender_collapsed_symbols.gct"
     phenotypesFilePath = "Gene Expressions Datasets/Lymphoblastoid Gender/Gender.cls"
 
@@ -110,7 +133,8 @@ if __name__ == '__main__':
 
     #Rank in correlation to phenotypes
     rankedGeneExpr, phenotypesPerGene = rankGeneExpr(geneExpr, phenotypes)
-    enrichmentScore = enrichmentScore(rankedGeneExpr, pathwayGeneSets, phenotypesPerGene, 1)
+    p = 1
+    enrichmentScore = enrichmentScore(rankedGeneExpr, pathwayGeneSets, p)
     # Estimating significance
     significanceEstimation = estimateSignificance(enrichmentScore)
 

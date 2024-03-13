@@ -10,23 +10,50 @@ import json
 from icecream import ic
 
 
-def enrichmentScore(rankedGeneExpr, pathwayGeneSets, p):
+def enrichmentScore(rankedGeneExprValues, rankedGeneNames, pathwayGeneSets, p):
     ERScorePerPathway = []
     ERScorePerPathwayIndex = 0
 
-    for pathwayGeneSetName in list(pathwayGeneSets.keys())[0:150]:
-        if ERScorePerPathwayIndex % 75 == 0:
-            ic(ERScorePerPathwayIndex)
+    for pathwayGeneSetName, geneSet in list(pathwayGeneSets.items())[0:200]:
         runningSum = 0
         minER = math.inf
         maxER = -math.inf
         ERScorePerPathway.append([pathwayGeneSetName])
+        #if ERScorePerPathwayIndex % 75 == 0:
+        #    ic(ERScorePerPathwayIndex)
+        # Extract gene indices for the current pathway
+        pathwayGeneMatch = np.isin(rankedGeneNames, geneSet)
+        pathwayGeneIndices = np.where(pathwayGeneMatch)[0]
+        nonPathwayGeneIndices = np.where(~pathwayGeneMatch)[0]
 
-        for geneIndex in range(len(rankedGeneExpr)):
-            if rankedGeneExpr[geneIndex][0] in pathwayGeneSets[pathwayGeneSetName]:
-                runningSum += abs(rankedGeneExpr[geneIndex][2]**p)
+        # Calculate running sum for pathway genes
+        pathwayRunningSum = np.sum(np.abs(rankedGeneExprValues[pathwayGeneIndices, -1]) ** p)
+
+        # Calculate running sum for non-pathway genes
+        nonPathwayRunningSum = np.sum(-rankedGeneExprValues[nonPathwayGeneIndices, -1] ** p)
+
+        # Update minER and maxER based on running sums
+        minER = min(minER, pathwayRunningSum, nonPathwayRunningSum)
+        maxER = max(maxER, pathwayRunningSum, nonPathwayRunningSum)
+
+        # Append minER or maxER to ERScorePerPathway
+        if abs(minER) > abs(maxER):
+            ERScorePerPathway[ERScorePerPathwayIndex].append(minER)
+        else:
+            ERScorePerPathway[ERScorePerPathwayIndex].append(maxER)
+
+        ERScorePerPathwayIndex += 1
+
+        """runningSum = 0
+        minER = math.inf
+        maxER = -math.inf
+        ERScorePerPathway.append([pathwayGeneSetName])
+
+        for geneIndex in range(len(rankedGeneExprValues)):
+            if rankedGeneNames[geneIndex] in pathwayGeneSets[pathwayGeneSetName]:
+                runningSum += abs(rankedGeneExprValues[geneIndex][-1]**p)
             else:
-                runningSum -= rankedGeneExpr[geneIndex][2]**p
+                runningSum -= rankedGeneExprValues[geneIndex][-1]**p
 
             minER = min(minER, runningSum)
             maxER = max(maxER, runningSum)
@@ -35,8 +62,8 @@ def enrichmentScore(rankedGeneExpr, pathwayGeneSets, p):
             ERScorePerPathway[ERScorePerPathwayIndex].append(minER)
         else:
             ERScorePerPathway[ERScorePerPathwayIndex].append(maxER)
-        ERScorePerPathwayIndex += 1
-    ic(sorted(ERScorePerPathway)[0])
+        ERScorePerPathwayIndex += 1"""
+
     return ERScorePerPathway
 
 
@@ -51,6 +78,7 @@ def rankGeneExpr(geneExprValues, geneNames, phenotypesCount):
     :return: ranked list according to the metric described above [gene name, expression values, metric],
     """
     rankedGeneExprValues = np.copy(geneExprValues)
+    rankedGeneNames = np.copy(geneNames)
     # Correlation of genes with phenotype 1
     GroupASize = phenotypesCount[1][0]
     GroupBSize = phenotypesCount[1][1]
@@ -140,14 +168,14 @@ def shuffleGeneExpr(randomGeneExpr):
     random.shuffle(randomGeneExpr)
 
 
-def estimateSignificance(enrichmentScorePerPathway, geneExpr, phenotypes, pathwayGeneSets, p):
+def estimateSignificance(enrichmentScorePerPathway, geneExprValues, geneNames, phenotypesCount, pathwayGeneSets, p):
     ERNullDistributionPerPathway = []
-    randomGeneExpr = copy.deepcopy(geneExpr)
-    for i in range(3):
-        shuffleGeneExpr(randomGeneExpr)
+    randomGeneExprValues = copy.deepcopy(geneExprValues)
+    for i in range(10):
+        shuffleGeneExpr(randomGeneExprValues)
         ic(i)
-        rankedGeneExpr, phenotypesPerGene = rankGeneExpr(randomGeneExpr, phenotypes)
-        ERNullDistributionPerPathway.append(enrichmentScore(rankedGeneExpr, pathwayGeneSets, p))
+        rankedGeneExprValues, rankedGeneNames = rankGeneExpr(randomGeneExprValues, geneNames, phenotypesCount)
+        ERNullDistributionPerPathway.append(enrichmentScore(rankedGeneExprValues, rankedGeneNames, pathwayGeneSets, p))
 
     for pathwayGeneSetIndex in range(len(ERNullDistributionPerPathway[0])):
         pathwayERScores = []
@@ -195,8 +223,8 @@ if __name__ == '__main__':
 
     # Enrichment score
     p = 1
-    #enrichmentScorePerPathway = enrichmentScore(rankedGeneExpr, pathwayGeneSets, p)
+    enrichmentScorePerPathway = enrichmentScore(rankedGeneExprValues, rankedGeneNames, pathwayGeneSets, p)
     # Estimating significance
-    #enrichmentScorePerPathwayWithPValue = estimateSignificance(enrichmentScorePerPathway, geneExpr, phenotypes, pathwayGeneSets, p)
+    enrichmentScorePerPathwayWithPValue = estimateSignificance(enrichmentScorePerPathway, geneExprValues, geneNames, phenotypesCount, pathwayGeneSets, p)
 
     # MHT

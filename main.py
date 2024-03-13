@@ -1,18 +1,29 @@
+import copy
 import math
+import random
 
 import numpy as np
+from scipy.stats import ttest_ind
+import matplotlib.pyplot as plt
+
 import json
 from icecream import ic
+
+
 def enrichmentScore(rankedGeneExpr, pathwayGeneSets, p):
     ERScorePerPathway = []
+    ERScorePerPathwayIndex = 0
 
-    for pathwayGeneSetIndex in range(len(pathwayGeneSets)//10):
+    for pathwayGeneSetName in list(pathwayGeneSets.keys())[0:150]:
+        if ERScorePerPathwayIndex % 75 == 0:
+            ic(ERScorePerPathwayIndex)
         runningSum = 0
         minER = math.inf
         maxER = -math.inf
-        ERScorePerPathway.append([pathwayGeneSets[pathwayGeneSetIndex][0]])
+        ERScorePerPathway.append([pathwayGeneSetName])
+
         for geneIndex in range(len(rankedGeneExpr)):
-            if rankedGeneExpr[geneIndex][0] in pathwayGeneSets[pathwayGeneSetIndex][1]:
+            if rankedGeneExpr[geneIndex][0] in pathwayGeneSets[pathwayGeneSetName]:
                 runningSum += abs(rankedGeneExpr[geneIndex][2]**p)
             else:
                 runningSum -= rankedGeneExpr[geneIndex][2]**p
@@ -21,46 +32,62 @@ def enrichmentScore(rankedGeneExpr, pathwayGeneSets, p):
             maxER = max(maxER, runningSum)
 
         if abs(minER) > abs(maxER):
-            ERScorePerPathway[pathwayGeneSetIndex].append(minER)
+            ERScorePerPathway[ERScorePerPathwayIndex].append(minER)
         else:
-            ERScorePerPathway[pathwayGeneSetIndex].append(maxER)
-    ic(sorted(ERScorePerPathway)[-1])
+            ERScorePerPathway[ERScorePerPathwayIndex].append(maxER)
+        ERScorePerPathwayIndex += 1
+    ic(sorted(ERScorePerPathway)[0])
+    return ERScorePerPathway
 
-def rankGeneExpr(geneExpr, phenotypes):
+
+def rankGeneExpr(geneExprValues, geneNames, phenotypesCount):
     """
-    Rank the gene expression set first according to the metric chosen to rank every line, it's simply by log of
-    subtracting the averages of phenotype 2 from 1 (change fold) and ordering the list accordingly in descendant order.
-    Then order every line by value and then by order of correlation to the phenotype.
+    Rank the gene expression set according to the metric chosen to rank every line, we average the gene expression
+    values for every phenotype calculate the FC in from phenotype 1 to 2 and weighting it by the p-value and rank in
+    descendant order.
 
-    :param geneExpr: dictionary (gene name, list of expression values)
+    :param rankedGeneExpr: dictionary (gene name, list of expression values)
     :param phenotypes: a list of phenotypes indicating the phenotype of an expression in a certain position
     :return: ranked list according to the metric described above [gene name, expression values, metric],
-    permuted phenotype lists that correlates with the expression values.
     """
-
+    rankedGeneExprValues = np.copy(geneExprValues)
     # Correlation of genes with phenotype 1
-    phenotypes = np.array(phenotypes)
-    phenotypesCount = np.unique(phenotypes, return_counts=True)
-    for i in range(len(geneExpr)):
-        differentialGeneExpr = np.sum(geneExpr[i][1][0:phenotypesCount[1][0]])/phenotypesCount[1][0] - \
-                               np.sum(geneExpr[i][1][phenotypesCount[1][1]:])/phenotypesCount[1][1]
-        if differentialGeneExpr > 0:
-            geneExpr[i].append(math.log(differentialGeneExpr, 2))  # log(phenotype 1-2) fold change
-        elif differentialGeneExpr < 0:
-            geneExpr[i].append(-math.log(abs(differentialGeneExpr), 2))
-        else:
-            geneExpr[i].append(0)
+    GroupASize = phenotypesCount[1][0]
+    GroupBSize = phenotypesCount[1][1]
 
-    geneExpr.sort(key=lambda x: x[2], reverse=True)
+    # Extract expression values for both groups
+    GroupA = rankedGeneExprValues[:, :GroupASize]
+    GroupB = rankedGeneExprValues[:, GroupBSize:]
 
-    # Order every gene samples by ascendant value of expression (and the phenotype list)
+    # Perform t-test on each gene
+    t_statistics, p_values = ttest_ind(GroupA, GroupB, axis=1)
+
+    # Calculate fold change
+    foldChange = (np.sum(GroupB, axis=1) / GroupBSize) - (np.sum(GroupA, axis=1) / GroupASize)
+    foldChange[foldChange > 0] = np.log2(foldChange[foldChange > 0])
+    foldChange[foldChange < 0] = -np.log2(np.abs(foldChange[foldChange < 0]))
+    foldChange[foldChange == 0] = 0
+
+    # Calculate differential gene expression
+    differentialGeneExpr = foldChange * (-np.log10(p_values))
+
+    # Append differential gene expression to rankedGeneExpr
+    rankedGeneExprValues = np.column_stack((rankedGeneExprValues, differentialGeneExpr))
+
+    # Sort rankedGeneExpr by differential gene expression
+    permutations = rankedGeneExprValues[:, -1].argsort()[::-1]
+    rankedGeneExprValues = rankedGeneExprValues[permutations]
+    rankedGeneNames = np.array(geneNames)[permutations]
+
+    """# Order every gene samples by ascendant value of expression (and the phenotype list)
     phenotypesPerGene = []
-    for i in range(len(geneExpr)):
-        permutationOrder = np.argsort(geneExpr[i][1])
-        geneExpr[i][1] = geneExpr[i][1][permutationOrder]
+    for i in range(len(rankedGeneExpr)):
+        permutationOrder = np.argsort(rankedGeneExpr[i][1])
+        rankedGeneExpr[i][1] = rankedGeneExpr[i][1][permutationOrder]
         phenotypesPerGene.append([])
-        phenotypesPerGene[i].append(phenotypes[permutationOrder])
-    return geneExpr, phenotypesPerGene
+        phenotypesPerGene[i].append(phenotypes[permutationOrder])"""
+
+    return rankedGeneExprValues, rankedGeneNames
 
 
 def fetchGeneExprFromGCTFile(genesExprFilePath):
@@ -74,8 +101,8 @@ def fetchGeneExprFromGCTFile(genesExprFilePath):
         lines = file.readlines()
 
         # Extract gene expression data
-        geneExpr = []
-        index = 0
+        geneExprValues = []
+        geneNames = []
         for line in lines[3:]:
             columns = line.split('\t')
             geneName = columns[0].strip("\t")
@@ -84,34 +111,65 @@ def fetchGeneExprFromGCTFile(genesExprFilePath):
                 if "///" in geneName:
                     geneName = geneName.split(" ")[0]
 
-                geneExpr.append([])
-                geneExpr[index].append(geneName)
-                geneExpr[index].append(np.array(expressionValues))
-                index += 1
-    return geneExpr
+                geneNames.append(geneName)
+                geneExprValues.append(expressionValues)
+
+    return np.array(geneExprValues), geneNames
 
 
 def fetchPathwayGeneSetsFromJSON(geneSetsFilePath):
     """
     Extracts gene sets from a json file given the filepath as an input
     :param geneSetsFilePath: filepath to a json file containing the gene sets
-    :return: a list of lists of [geneSet name, list of genes]
+    :return: a dictionary of [geneSet name, set of genes]
     """
     with open(geneSetsFilePath, 'r') as file:
         geneSetFileDataC1 = file.read()
     geneSetsJSON = json.loads(geneSetFileDataC1)
 
-    geneSets = []
+    geneSets = {}
     for geneSet, items in geneSetsJSON.items():
-        getSetName = items["systematicName"]
-        genesList = items["geneSymbols"]
-        geneSets.append([getSetName, genesList])
+        getSetName = geneSet
+        genesList = set(items["geneSymbols"])
+        geneSets[getSetName] = genesList
 
     return geneSets
 
 
-def estimateSignificance(enrichmentScore):
-    pass
+def shuffleGeneExpr(randomGeneExpr):
+    random.shuffle(randomGeneExpr)
+
+
+def estimateSignificance(enrichmentScorePerPathway, geneExpr, phenotypes, pathwayGeneSets, p):
+    ERNullDistributionPerPathway = []
+    randomGeneExpr = copy.deepcopy(geneExpr)
+    for i in range(3):
+        shuffleGeneExpr(randomGeneExpr)
+        ic(i)
+        rankedGeneExpr, phenotypesPerGene = rankGeneExpr(randomGeneExpr, phenotypes)
+        ERNullDistributionPerPathway.append(enrichmentScore(rankedGeneExpr, pathwayGeneSets, p))
+
+    for pathwayGeneSetIndex in range(len(ERNullDistributionPerPathway[0])):
+        pathwayERScores = []
+        for erScoreIndex in range(len(ERNullDistributionPerPathway)):
+            pathwayERScores.append(ERNullDistributionPerPathway[erScoreIndex][pathwayGeneSetIndex])
+        pathwayERScores = np.array(pathwayERScores)
+        if enrichmentScorePerPathway[pathwayGeneSetIndex][1] >= 0:
+            p_value = 0
+            for pathwayERScore in pathwayERScores:
+                if float(pathwayERScore[1]) >= enrichmentScorePerPathway[pathwayGeneSetIndex][1]:
+                    p_value += 1
+            p_value /= len(pathwayERScores)
+            enrichmentScorePerPathway[pathwayGeneSetIndex].append(p_value)
+        else:
+            p_value = 0
+            for pathwayERScore in pathwayERScores:
+                if float(pathwayERScore[1]) <= enrichmentScorePerPathway[pathwayGeneSetIndex][1]:
+                    p_value += 1
+            p_value /= len(pathwayERScores)
+            enrichmentScorePerPathway[pathwayGeneSetIndex].append(p_value)
+
+    return enrichmentScorePerPathway
 
 
 def fetchPhenotypes(phenotypesFilePath):
@@ -128,14 +186,17 @@ if __name__ == '__main__':
 
     # Fetch data from files
     pathwayGeneSets = fetchPathwayGeneSetsFromJSON(pathwaysGeneSetsFilePath)
-    geneExpr = fetchGeneExprFromGCTFile(geneExpressionsDatasetFilePath)
+    geneExprValues, geneNames = fetchGeneExprFromGCTFile(geneExpressionsDatasetFilePath)
     phenotypes = fetchPhenotypes(phenotypesFilePath)
 
-    #Rank in correlation to phenotypes
-    rankedGeneExpr, phenotypesPerGene = rankGeneExpr(geneExpr, phenotypes)
+    # Rank in correlation to phenotypes
+    phenotypesCount = np.unique(phenotypes, return_counts=True)
+    rankedGeneExprValues, rankedGeneNames = rankGeneExpr(geneExprValues, geneNames, phenotypesCount)
+
+    # Enrichment score
     p = 1
-    enrichmentScore = enrichmentScore(rankedGeneExpr, pathwayGeneSets, p)
+    #enrichmentScorePerPathway = enrichmentScore(rankedGeneExpr, pathwayGeneSets, p)
     # Estimating significance
-    significanceEstimation = estimateSignificance(enrichmentScore)
+    #enrichmentScorePerPathwayWithPValue = estimateSignificance(enrichmentScorePerPathway, geneExpr, phenotypes, pathwayGeneSets, p)
 
     # MHT

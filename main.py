@@ -1,7 +1,8 @@
 import argparse
-import copy
 import math
 import random
+import time
+from copy import copy
 
 import numpy as np
 from scipy.stats import ttest_ind
@@ -11,78 +12,21 @@ import json
 from icecream import ic
 
 
-class GSEA:
-    def __init__(self, pathwaysGeneSetsFilePath, geneExpressionsDatasetFilePath, phenotypesFilePath):
-        # Fetch data from files
-        self.pathwayGeneSets = self._fetchPathwayGeneSetsFromJSON(pathwaysGeneSetsFilePath)
-        self.geneExprValues, self.geneNames = self._fetchGeneExprFromGCTFile(geneExpressionsDatasetFilePath)
-        self.phenotypes = self._fetchPhenotypes(phenotypesFilePath)
-        self._phenotypesCount = np.unique(self.phenotypes, return_counts=True)
 
-        self.ERPerPathway = None
 
-    def _fetchPathwayGeneSetsFromJSON(self, geneSetsFilePath):
-        """
-        Extracts gene sets from a json file given the filepath as an input
-        :param geneSetsFilePath: filepath to a json file containing the gene sets
-        :return: a dictionary of {geneSet name: set of genes}
-        """
-        with open(geneSetsFilePath, 'r') as file:
-            geneSetFileDataC1 = file.read()
-        geneSetsJSON = json.loads(geneSetFileDataC1)
 
-        geneSets = {}
-        for geneSet, items in geneSetsJSON.items():
-            getSetName = geneSet
-            genesList = set(items["geneSymbols"])
-            geneSets[getSetName] = genesList
-
-        return geneSets
-
-    def _fetchGeneExprFromGCTFile(self, genesExprFilePath):
-        """
-        Extract the list of gene expressions from a gct file given as input the file-path.
-        :param genesExprFilePath: file-path to the gct file.
-        :return: a list of lists of [gene name, list of expression values from different samples]
-        """
-        with open(genesExprFilePath, 'r') as file:
-            # Read the lines of the file
-            lines = file.readlines()
-
-            # Extract gene expression data
-            geneExprValues = []
-            geneNames = []
-            for line in lines[3:]:
-                columns = line.split('\t')
-                geneName = columns[0].strip("\t")
-                if "_at" not in geneName:
-                    expressionValues = list(map(float, columns[2:]))
-                    if "///" in geneName:
-                        geneName = geneName.split(" ")[0]
-
-                    geneNames.append(geneName)
-                    geneExprValues.append(expressionValues)
-
-        return np.array(geneExprValues), geneNames
-
-    def _fetchPhenotypes(self, phenotypesFilePath):
-        with open(phenotypesFilePath, 'r') as file:
-            lines = file.readlines()
-            phenotypes = lines[2].strip().split()
-            return phenotypes
-
-    def _rankGeneExpr(self, geneExprValues, geneNames):
-        """
-        Rank the gene expression set according to the metric chosen to rank every line, we average the gene expression
-        values for every phenotype calculate the FC in from phenotype 1 to 2 and weighting it by the p-value and rank in
-        descendant order.
+   # def _rankGeneExpr(self, geneExprValues, geneNames, classOfDistinction):
+"""
+        Rank the gene expression set according to the metric chosen to rank every line, we choose the class of
+        distinction to be evaluated and sort accordingly in descending order.
 
         :param rankedGeneExpr: dictionary (gene name, list of expression values)
         :param geneNames: geneNames
         :return: ranked numpy list according to the metric described above [gene name, expression values, metric],
         """
-        rankedGeneExprValues = np.copy(geneExprValues)
-
+      #  rankedGeneExprValues = np.copy(geneExprValues)
+       # print(rankedGeneExprValues[0])
+"""
         # Correlation of genes with phenotype 1
         GroupASize = self._phenotypesCount[1][0]
         GroupBSize = self._phenotypesCount[1][1]
@@ -108,11 +52,11 @@ class GSEA:
         permutations = rankedDGE.argsort()[::-1]
         rankedDGE = rankedDGE[permutations]
         rankedGeneExprValues = rankedGeneExprValues[permutations]
-        rankedGeneNames = np.array(geneNames)[permutations]
+        rankedGeneNames = np.array(geneNames)[permutations]"""
+      #  return 0,0,0
+#        return rankedGeneExprValues, rankedGeneNames, rankedDGE
 
-        return rankedGeneExprValues, rankedGeneNames, rankedDGE
-
-    def _enrichmentScore(self, rankedDGE, rankedGeneNames, pathwayGeneSets, p):
+"""def _enrichmentScore(self, rankedDGE, rankedGeneNames, pathwayGeneSets, p):
         pathwaysNum = min(1000, len(pathwayGeneSets))
         ERScorePerPathwayValues = np.zeros(len(list(pathwayGeneSets.items())[0:pathwaysNum]))
         ERScorePerPathwayNames = np.array([None for _ in range((len(list(pathwayGeneSets.items())[0:pathwaysNum])))])
@@ -180,9 +124,9 @@ class GSEA:
                                                                     pathwayERScoreIndex]]) / len(
                     ERNullHypothesisDistribution)
 
-        return PValuePerPathway, ERScorePerPermutationPerPathway
+        return PValuePerPathway, ERScorePerPermutationPerPathway"""
 
-    def _getCorrectedPValuePerPathway(self,pathwayGeneSets , ERScorePerPathwayNames, ERScorePerPathwayValues, ERScorePerPermutationPerPathway):
+"""def _getCorrectedPValuePerPathway(self,pathwayGeneSets , ERScorePerPathwayNames, ERScorePerPathwayValues, ERScorePerPermutationPerPathway):
         correctedPValuePerPathway = np.zeros(len(ERScorePerPathwayValues))
         geneSetLengthPerPathway = np.array([len(pathwayGeneSets[pathwayName]) for pathwayName in ERScorePerPathwayNames])
         NERScorePerPathwayValues = ERScorePerPathwayValues/geneSetLengthPerPathway
@@ -201,39 +145,146 @@ class GSEA:
                                                                     pathwayERScoreIndex]]) / len(
                     NERNullHypothesisDistribution)
 
-        return correctedPValuePerPathway
+        return correctedPValuePerPathway"""
 
-    def getERPerPathwayWithPValue(self):
+"""    def getERPerPathwayWithPValue(self, classOfDistinction = 1):
         # Rank in correlation to phenotypes
         rankedGeneExprValues, rankedGeneNames, rankedDGE = self._rankGeneExpr(self.geneExprValues,
-                                                                              self.geneNames)
+                                                                              self.geneNames, classOfDistinction)
 
         # Enrichment score
-        ERScorePerPathwayValues, ERScorePerPathwayNames = self._enrichmentScore(rankedDGE,
-                                                                                rankedGeneNames,
-                                                                                self.pathwayGeneSets,
-                                                                                p=1)
+       # ERScorePerPathwayValues, ERScorePerPathwayNames = self._enrichmentScore(rankedDGE,
+       #                                                                         rankedGeneNames,
+        #                                                                        self.pathwayGeneSets,
+        #                                                                        p=1)
         # Estimating significance
-        PValuePerPathway, ERScorePerPermutationPerPathway = self._estimateSignificance(ERScorePerPathwayValues,
-                                                                                       self.geneExprValues,
-                                                                                       self.geneNames,
-                                                                                       self.pathwayGeneSets,
-                                                                                       p=1,
-                                                                                       permutationsNum=10)
-        correctedPValuePerPathway = self._getCorrectedPValuePerPathway(self.pathwayGeneSets, ERScorePerPathwayNames,
-                                                                       ERScorePerPathwayValues, ERScorePerPermutationPerPathway)
+       # PValuePerPathway, ERScorePerPermutationPerPathway = self._estimateSignificance(ERScorePerPathwayValues,
+        #                                                                               self.geneExprValues,
+        #                                                                               self.geneNames,
+        #                                                                               self.pathwayGeneSets,
+        #                                                                               p=1,
+        #                                                                               permutationsNum=10)
+       # correctedPValuePerPathway = self._getCorrectedPValuePerPathway(self.pathwayGeneSets, ERScorePerPathwayNames,
+       #                                                                ERScorePerPathwayValues, ERScorePerPermutationPerPathway)
+        return 0,0,0,0
+#        return PValuePerPathway, ERScorePerPathwayValues, correctedPValuePerPathway, list(self.pathwayGeneSets.keys())"""
 
-        return PValuePerPathway, ERScorePerPathwayValues, correctedPValuePerPathway, list(self.pathwayGeneSets.keys())
+
+def fetchSDict(SDictFilePath):
+    """
+    Extracts gene sets from a json file given the filepath as an input. Gene sets with 15 genes and more are chosen
+    :param SDictFilePath: filepath to a json file containing the gene sets
+    :return: a dictionary of {geneSet name: set of genes}
+    """
+    with open(SDictFilePath, 'r') as file:
+        geneSetFileDataC1 = file.read()
+    geneSetsJSON = json.loads(geneSetFileDataC1)
+
+    SDict = {}
+    for SName, items in geneSetsJSON.items():
+        if len(items["geneSymbols"]) >= 15:
+            S = set(items["geneSymbols"])
+            SDict[SName] = S
+    print(f"{len(SDict)} pathways genes sets have been fetched")
+    return SDict
 
 
+def fetchD(DFilePath):
+    """
+    Extract the list of gene expressions from a gct file given as input the file-path.
+    :param DFilePath: file-path to the gct file.
+    :return: a list of lists of [gene name, list of expression values from different samples]
+    """
+    with open(DFilePath, 'r') as file:
+        # Read the lines of the file
+        lines = file.readlines()
+
+        # Extract gene expression data
+        D = []
+        DNames = []
+        for line in lines[3:]:
+            columns = line.split('\t')
+            DName = columns[0].strip("\t")
+            if "_at" not in DName:
+                expressionValues = list(map(float, columns[2:]))
+                if "///" in DName:
+                    DName = DName.split(" ")[0]
+
+                DNames.append(DName)
+                D.append(expressionValues)
+
+    print(f"{len(D)} genes have been fetched")
+    return np.array(D), DNames
+
+
+def fetchP(PFilePath):
+    with open(PFilePath, 'r') as file:
+        lines = file.readlines()
+        phenotypes = lines[2].strip().split()
+        print(f"{len(phenotypes)} phenotypes have been fetched")
+        return phenotypes
+
+
+def sortD(D, DNames, P, C):
+    D = copy(D)
+    DNames = copy(DNames)
+    #  Extract indices of the chosen phenotype
+    uniqueP = list(set(P))
+    if C == 0:
+        indexP = P.index(uniqueP[1])
+        PIndexes = np.arange(0, indexP)
+    else:
+        indexP = P.index(uniqueP[1])
+        PIndexes = np.arange(indexP, len(P))
+    #  Sort according to one prob for each gene of the chosen phenotype
+    sortedD = []
+    for i in range(len(D)):
+        sortedD.append([D[i], D[i][random.choice(PIndexes)], DNames[i]])
+    sortedD = sorted(sortedD, key=lambda x: x[1], reverse=True)
+    #  Extract names and values for gene expressions
+    LNames = []
+    L = []
+    LProbs = []
+    for i in range(len(sortedD)):
+        LNames.append(sortedD[i][2])
+        L.append(sorted(sortedD[i][0], reverse=True))
+        LProbs.append(sortedD[i][1])
+    return np.array(L), np.array(LProbs), np.array(LNames)
+
+def ER(S, LProbs, LNames, p):
+    NH = len(S)
+    N = len(LProbs)
+    NR = np.sum(abs(LProbs[np.where(np.isin(LNames, S))])**p)
+    ERS = 0
+    absMaxDev = -math.inf
+
+    oldPHits = 0
+    oldPMisses = 0
+    LInS = np.isin(LNames, S)
+    for i in range(len(L)):
+        PHits = oldPHits
+        PMisses = oldPMisses
+
+        if LInS[i]:
+            PHits += (abs(LProbs[i])**p) / NR
+        else:
+            PMisses += 1/(N-NH)
+
+        oldPHits = PHits
+        oldPMisses = PMisses
+        if absMaxDev < abs(PHits-PMisses):
+            absMaxDev = abs(PHits-PMisses)
+            ERS = PHits-PMisses
+
+    return ERS
 
 
 def parseArgs():
     parser = argparse.ArgumentParser(
         description="Process pathway gene sets, gene expressions dataset, and phenotypes file paths.")
-    parser.add_argument("pathwaysGeneSetsFilePath", type=str, help="Path to the pathway gene sets JSON file")
-    parser.add_argument("geneExpressionsDatasetFilePath", type=str, help="Path to the gene expressions dataset file")
-    parser.add_argument("phenotypesFilePath", type=str, help="Path to the phenotypes file")
+    parser.add_argument("SDictFilePath", type=str, help="Path to the pathway gene sets JSON file")
+    parser.add_argument("LFilePath", type=str, help="Path to the gene expressions dataset file")
+    parser.add_argument("PFilePath", type=str, help="Path to the phenotypes file")
     args = parser.parse_args()
 
     return parser, args
@@ -244,10 +295,16 @@ if __name__ == '__main__':
     parser, args = parseArgs()
 
     # Fetch data from files
-    gsea = GSEA(args.pathwaysGeneSetsFilePath, args.geneExpressionsDatasetFilePath, args.phenotypesFilePath)
-    PValuesPerPathway, ERScorePerPathwayValues, correctedPValuePerPathway, pathwaysNames = gsea.getERPerPathwayWithPValue()
-    ic(PValuesPerPathway[0])
-    ic(ERScorePerPathwayValues[0])
-    ic(correctedPValuePerPathway[0])
-    ic(pathwaysNames[0])
+    SDict = fetchSDict(args.SDictFilePath)  # SDict: Dict {pathway name: gene sets values}
+    D, DNames = fetchD(args.DFilePath)  # D: list of lists of gene expression values of k samples. DName: list of names of every gene in the respective order
+    P = fetchP(args.PFilePath)  # P: list of phenotypes (p1,..,p1n,p21,...,p2m)
+
+    # choose a class of distinction and a pathway to evaluate
+    pathway = "pathway"
+    S = np.array(list(SDict["chr14q32"]))
+    C = 0  # class of distinction
+    L, LProbs, LNames = sortD(D, DNames, P, C)
+    p = 1  # weight of the step
+    ERS = ER(S, LProbs, LNames, p)
+    print(ERS)
 

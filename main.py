@@ -5,169 +5,21 @@ import time
 from copy import copy
 
 import numpy as np
-from scipy.stats import ttest_ind
 import matplotlib.pyplot as plt
-
+import plotly.express as px
 import json
 from icecream import ic
+import plotly.graph_objs as go
 
+def parseArgs():
+    parser = argparse.ArgumentParser(
+        description="Process pathway gene sets, gene expressions dataset, and phenotypes file paths.")
+    parser.add_argument("SDictFilePath", type=str, help="Path to the pathway gene sets JSON file")
+    parser.add_argument("DFilePath", type=str, help="Path to the gene expressions dataset file")
+    parser.add_argument("PFilePath", type=str, help="Path to the phenotypes file")
+    args = parser.parse_args()
 
-
-
-
-   # def _rankGeneExpr(self, geneExprValues, geneNames, classOfDistinction):
-"""
-        Rank the gene expression set according to the metric chosen to rank every line, we choose the class of
-        distinction to be evaluated and sort accordingly in descending order.
-
-        :param rankedGeneExpr: dictionary (gene name, list of expression values)
-        :param geneNames: geneNames
-        :return: ranked numpy list according to the metric described above [gene name, expression values, metric],
-        """
-      #  rankedGeneExprValues = np.copy(geneExprValues)
-       # print(rankedGeneExprValues[0])
-"""
-        # Correlation of genes with phenotype 1
-        GroupASize = self._phenotypesCount[1][0]
-        GroupBSize = self._phenotypesCount[1][1]
-
-        # Extract expression values for both groups
-        GroupA = rankedGeneExprValues[:, :GroupASize]
-        GroupB = rankedGeneExprValues[:, GroupBSize:]
-
-        # Perform t-test on each gene to calculate p-value
-        t_statistics, p_values = ttest_ind(GroupA, GroupB, axis=1)
-
-        # Calculate fold change
-        foldChange = (np.sum(GroupB, axis=1) / GroupBSize) - (np.sum(GroupA, axis=1) / GroupASize)
-        foldChange[foldChange > 0] = np.log2(foldChange[foldChange > 0])
-        foldChange[foldChange < 0] = -np.log2(np.abs(foldChange[foldChange < 0]))
-        foldChange[foldChange == 0] = 0
-
-        # Calculate differential gene expression
-        rankedDGE = foldChange * (-np.log10(p_values))
-
-        # Sort rankedGeneExpr by differential gene expression in descendant order
-
-        permutations = rankedDGE.argsort()[::-1]
-        rankedDGE = rankedDGE[permutations]
-        rankedGeneExprValues = rankedGeneExprValues[permutations]
-        rankedGeneNames = np.array(geneNames)[permutations]"""
-      #  return 0,0,0
-#        return rankedGeneExprValues, rankedGeneNames, rankedDGE
-
-"""def _enrichmentScore(self, rankedDGE, rankedGeneNames, pathwayGeneSets, p):
-        pathwaysNum = min(1000, len(pathwayGeneSets))
-        ERScorePerPathwayValues = np.zeros(len(list(pathwayGeneSets.items())[0:pathwaysNum]))
-        ERScorePerPathwayNames = np.array([None for _ in range((len(list(pathwayGeneSets.items())[0:pathwaysNum])))])
-        ERScorePerPathwayIndex = 0
-
-        for pathwayGeneSetName, geneSet in list(pathwayGeneSets.items())[0:pathwaysNum]:
-            runningSum = 0
-            minER = math.inf
-            maxER = -math.inf
-
-            ERScorePerPathwayNames[ERScorePerPathwayIndex] = pathwayGeneSetName
-            # if ERScorePerPathwayIndex % 75 == 0:
-            #    ic(ERScorePerPathwayIndex)
-            # Extract gene indices for the current pathway
-            pathwayGeneMatch = np.isin(rankedGeneNames, geneSet)
-            pathwayGeneIndices = np.where(pathwayGeneMatch)[0]
-            nonPathwayGeneIndices = np.where(~pathwayGeneMatch)[0]
-
-            # Calculate running sum for pathway genes
-            pathwayRunningSum = np.sum(np.abs(rankedDGE[pathwayGeneIndices]) ** p)
-
-            # Calculate running sum for non-pathway genes
-            nonPathwayRunningSum = np.sum(-rankedDGE[nonPathwayGeneIndices] ** p)
-
-            # Update minER and maxER based on running sums
-            minER = min(minER, pathwayRunningSum, nonPathwayRunningSum)
-            maxER = max(maxER, pathwayRunningSum, nonPathwayRunningSum)
-
-            # Append minER or maxER to ERScorePerPathway
-            if abs(minER) > abs(maxER):
-                ERScorePerPathwayValues[ERScorePerPathwayIndex] = minER
-            else:
-                ERScorePerPathwayValues[ERScorePerPathwayIndex] = maxER
-
-            ERScorePerPathwayIndex += 1
-
-        return ERScorePerPathwayValues, ERScorePerPathwayNames
-
-    def _shuffleGeneExprValues(self, randomGeneExprValues):
-        np.apply_along_axis(np.random.shuffle, axis=1, arr=randomGeneExprValues)
-
-    def _estimateSignificance(self, ERScorePerPathwayValues, geneExprValues, geneNames, pathwayGeneSets, p,
-                              permutationsNum):
-        ERScorePerPermutationPerPathway = np.zeros((permutationsNum, len(ERScorePerPathwayValues)))
-        randomGeneExprValues = np.copy(geneExprValues)
-        for perm in range(permutationsNum):
-            self._shuffleGeneExprValues(randomGeneExprValues)
-            ic(perm)
-            rankedGeneExprValues, rankedGeneNames, rankedDGE = self._rankGeneExpr(randomGeneExprValues, geneNames)
-            ERScorePerPermutationPerPathway[perm], _ = self._enrichmentScore(rankedDGE, rankedGeneNames,
-                                                                             pathwayGeneSets, p)
-
-        PValuePerPathway = np.zeros(len(ERScorePerPathwayValues))
-
-        for pathwayERScoreIndex in range(len(ERScorePerPathwayValues)):
-            ERNullHypothesisDistribution = ERScorePerPermutationPerPathway[:, pathwayERScoreIndex]
-            if ERScorePerPathwayValues[pathwayERScoreIndex] >= 0:
-                PValuePerPathway[pathwayERScoreIndex] = len(ERNullHypothesisDistribution[
-                                                                ERNullHypothesisDistribution >= ERScorePerPathwayValues[
-                                                                    pathwayERScoreIndex]]) / len(
-                    ERNullHypothesisDistribution)
-            else:
-                PValuePerPathway[pathwayERScoreIndex] = len(ERNullHypothesisDistribution[
-                                                                ERNullHypothesisDistribution <= ERScorePerPathwayValues[
-                                                                    pathwayERScoreIndex]]) / len(
-                    ERNullHypothesisDistribution)
-
-        return PValuePerPathway, ERScorePerPermutationPerPathway"""
-
-"""def _getCorrectedPValuePerPathway(self,pathwayGeneSets , ERScorePerPathwayNames, ERScorePerPathwayValues, ERScorePerPermutationPerPathway):
-        correctedPValuePerPathway = np.zeros(len(ERScorePerPathwayValues))
-        geneSetLengthPerPathway = np.array([len(pathwayGeneSets[pathwayName]) for pathwayName in ERScorePerPathwayNames])
-        NERScorePerPathwayValues = ERScorePerPathwayValues/geneSetLengthPerPathway
-        NERScorePerPermutationPerPathway = ERScorePerPermutationPerPathway/geneSetLengthPerPathway
-
-        for pathwayERScoreIndex in range(len(NERScorePerPathwayValues)):
-            NERNullHypothesisDistribution = ERScorePerPermutationPerPathway[:, pathwayERScoreIndex]
-            if NERScorePerPathwayValues[pathwayERScoreIndex] >= 0:
-                correctedPValuePerPathway[pathwayERScoreIndex] = len(NERNullHypothesisDistribution[
-                                                                NERNullHypothesisDistribution >= NERScorePerPathwayValues[
-                                                                    pathwayERScoreIndex]]) / len(
-                    NERNullHypothesisDistribution)
-            else:
-                correctedPValuePerPathway[pathwayERScoreIndex] = len(NERNullHypothesisDistribution[
-                                                                NERNullHypothesisDistribution <= NERScorePerPathwayValues[
-                                                                    pathwayERScoreIndex]]) / len(
-                    NERNullHypothesisDistribution)
-
-        return correctedPValuePerPathway"""
-
-"""    def getERPerPathwayWithPValue(self, classOfDistinction = 1):
-        # Rank in correlation to phenotypes
-        rankedGeneExprValues, rankedGeneNames, rankedDGE = self._rankGeneExpr(self.geneExprValues,
-                                                                              self.geneNames, classOfDistinction)
-
-        # Enrichment score
-       # ERScorePerPathwayValues, ERScorePerPathwayNames = self._enrichmentScore(rankedDGE,
-       #                                                                         rankedGeneNames,
-        #                                                                        self.pathwayGeneSets,
-        #                                                                        p=1)
-        # Estimating significance
-       # PValuePerPathway, ERScorePerPermutationPerPathway = self._estimateSignificance(ERScorePerPathwayValues,
-        #                                                                               self.geneExprValues,
-        #                                                                               self.geneNames,
-        #                                                                               self.pathwayGeneSets,
-        #                                                                               p=1,
-        #                                                                               permutationsNum=10)
-       # correctedPValuePerPathway = self._getCorrectedPValuePerPathway(self.pathwayGeneSets, ERScorePerPathwayNames,
-       #                                                                ERScorePerPathwayValues, ERScorePerPermutationPerPathway)
-        return 0,0,0,0
-#        return PValuePerPathway, ERScorePerPathwayValues, correctedPValuePerPathway, list(self.pathwayGeneSets.keys())"""
+    return parser, args
 
 
 def fetchSDict(SDictFilePath):
@@ -214,7 +66,7 @@ def fetchD(DFilePath):
                 D.append(expressionValues)
 
     print(f"{len(D)} genes have been fetched")
-    return np.array(D), DNames
+    return np.array(D), np.array(DNames)
 
 
 def fetchP(PFilePath):
@@ -222,89 +74,141 @@ def fetchP(PFilePath):
         lines = file.readlines()
         phenotypes = lines[2].strip().split()
         print(f"{len(phenotypes)} phenotypes have been fetched")
-        return phenotypes
+        return np.array(sorted(phenotypes))
 
 
 def sortD(D, DNames, P, C):
-    D = copy(D)
-    DNames = copy(DNames)
     #  Extract indices of the chosen phenotype
     uniqueP = list(set(P))
-    if C == 0:
-        indexP = P.index(uniqueP[1])
-        PIndexes = np.arange(0, indexP)
-    else:
-        indexP = P.index(uniqueP[1])
-        PIndexes = np.arange(indexP, len(P))
-    #  Sort according to one prob for each gene of the chosen phenotype
-    sortedD = []
-    for i in range(len(D)):
-        sortedD.append([D[i], D[i][random.choice(PIndexes)], DNames[i]])
-    sortedD = sorted(sortedD, key=lambda x: x[1], reverse=True)
-    #  Extract names and values for gene expressions
-    LNames = []
-    L = []
-    LProbs = []
-    for i in range(len(sortedD)):
-        LNames.append(sortedD[i][2])
-        L.append(sorted(sortedD[i][0], reverse=True))
-        LProbs.append(sortedD[i][1])
-    return np.array(L), np.array(LProbs), np.array(LNames)
+    PIndices = np.where(P == sorted(uniqueP)[C])[0]
 
-def ER(S, LProbs, LNames, p):
+   #  Sort according to one prob for each gene of the chosen phenotype
+    DProbes = D[:, np.random.choice(PIndices)]
+    indices = np.argsort(DProbes) 
+    L = D[indices][::-1]
+    LProbes = DProbes[indices][::-1]
+    LNames = DNames[indices][::-1]
+
+    return L, LProbes, LNames
+
+
+def computeES(S, LProbes, LNames, p, withRunningSum=False):
     NH = len(S)
-    N = len(LProbs)
-    NR = np.sum(abs(LProbs[np.where(np.isin(LNames, S))])**p)
-    ERS = 0
-    absMaxDev = -math.inf
-
-    oldPHits = 0
-    oldPMisses = 0
+    N = len(LProbes)
     LInS = np.isin(LNames, S)
-    for i in range(len(L)):
-        PHits = oldPHits
-        PMisses = oldPMisses
+    NR = np.sum(abs(LProbes[np.where(LInS)])**p)
+    ES = 0
 
+    absMaxDev = -math.inf
+    PHits = 0
+    PMisses = 0
+    if withRunningSum:
+        runningSum = np.zeros(N)
+    for i in range(N):
         if LInS[i]:
-            PHits += (abs(LProbs[i])**p) / NR
+            PHits += ((LProbes[i])**p) / NR
         else:
             PMisses += 1/(N-NH)
 
-        oldPHits = PHits
-        oldPMisses = PMisses
+        if withRunningSum:
+            runningSum[i] = PHits-PMisses
+
         if absMaxDev < abs(PHits-PMisses):
             absMaxDev = abs(PHits-PMisses)
-            ERS = PHits-PMisses
+            ES = PHits-PMisses
 
-    return ERS
+    if withRunningSum:
+        return ES, runningSum
+
+    return ES
 
 
-def parseArgs():
-    parser = argparse.ArgumentParser(
-        description="Process pathway gene sets, gene expressions dataset, and phenotypes file paths.")
-    parser.add_argument("SDictFilePath", type=str, help="Path to the pathway gene sets JSON file")
-    parser.add_argument("LFilePath", type=str, help="Path to the gene expressions dataset file")
-    parser.add_argument("PFilePath", type=str, help="Path to the phenotypes file")
-    args = parser.parse_args()
+def shuffleD(D, P, PIndices):
+    PIndices = np.random.permutation(PIndices)
+    P = P[PIndices]
+    D = D[:, PIndices]
+    return D, P, PIndices
 
-    return parser, args
+
+def computePValue(ES, S, D, DNames, P, C, p):
+    D = np.array(copy(D))
+    P = np.array(copy(P))
+    PIndices = list(range(len(P)))
+
+    permutations = 1000
+    ESNullDistribution = np.zeros(permutations)
+    for i in range(permutations):
+        D, P, PIndices = shuffleD(D, P, PIndices)
+        L, LProbes, LNames = sortD(D, DNames, P, C)
+        ESNullDistribution[i] = computeES(S, LProbes, LNames, p)
+
+        if i % 100 == 0:
+            print(i)
+
+    if ES >= 0:
+        PValue = len([0 <= ESNullValue <= ES for ESNullValue in ESNullDistribution]) / len(ESNullDistribution[ESNullDistribution>=0])
+    else:
+        PValue = len([ESNullValue >= ES for ESNullValue in ESNullDistribution]) / len(ESNullDistribution[ESNullDistribution<0])
+
+    return PValue, np.sort(ESNullDistribution)
+
+
+def plotRunningSum(runningSum, xLabel, yLabel, title):
+    plt.plot(runningSum)
+    plt.xlabel(xLabel)
+    plt.ylabel(yLabel)
+    plt.title(title)
+    plt.grid(True)
+    plt.show()
+
+
+def normalizeES(ES, ESNullDistribution):
+    meanES = np.mean(ESNullDistribution)
+    NES = ES/meanES
+    NESNullDistribution = ESNullDistribution/meanES
+
+    return NES, np.sort(NESNullDistribution)
+
+
+def computeQValue(NES, NESNullDistribution):
+    if NES >= 0:
+        QValue = len([0 <= NESNullValue <= NES for NESNullValue in NESNullDistribution]) / len(NESNullDistribution[NESNullDistribution>=0])
+    else:
+        QValue = len([NESNullValue >= NES for NESNullValue in NESNullDistribution]) / len(NESNullDistribution[NESNullDistribution<0])
+
+    return QValue
 
 
 if __name__ == '__main__':
-    # Input files path
-    parser, args = parseArgs()
+    # Input
+    #parser, args = parseArgs()
+    SDictFilePath = "Gene Expressions Datasets\Pathways Gene Sets\c1.all.v2023.2.Hs.json"
+    DFilePath = "Gene Expressions Datasets\Lymphoblastoid Gender\Gender_collapsed_symbols.gct"
+    PFilePath = "Gene Expressions Datasets\Lymphoblastoid Gender\Gender.cls"
+    C = 1  # Class of distinction
+    pathway = "chrYp11"  # pathway gene set name
+    p = 1  # Weight of step
 
     # Fetch data from files
-    SDict = fetchSDict(args.SDictFilePath)  # SDict: Dict {pathway name: gene sets values}
-    D, DNames = fetchD(args.DFilePath)  # D: list of lists of gene expression values of k samples. DName: list of names of every gene in the respective order
-    P = fetchP(args.PFilePath)  # P: list of phenotypes (p1,..,p1n,p21,...,p2m)
+    SDict = fetchSDict(SDictFilePath)  # Dict {pathway name: gene set values}
+    D, DNames = fetchD(DFilePath)  # Gene expressions set of multiple samples each (values and names)
+    P = fetchP(PFilePath)  # Phenotypes of samples in their respected order
+    S = np.array(list(SDict[pathway]))  # Pathway gene set values
 
-    # choose a class of distinction and a pathway to evaluate
-    pathway = "pathway"
-    S = np.array(list(SDict["chr14q32"]))
-    C = 0  # class of distinction
-    L, LProbs, LNames = sortD(D, DNames, P, C)
-    p = 1  # weight of the step
-    ERS = ER(S, LProbs, LNames, p)
-    print(ERS)
+    # Rank the gene set expression values.
+    L, LProbes, LNames = sortD(D, DNames, P, C)  # Ranked gene set expression values, chosen probe and gene names
 
+    # Compute the ES
+    ES, runningSum = computeES(S, LProbes, LNames, p, withRunningSum=True)
+    ic(ES)
+    plotRunningSum(runningSum, "Gene", "Value", "Running sum")
+
+    #  Estimate significance by computing the p-value
+    PValue, ESNullDistribution = computePValue(ES, S, D, DNames, P, C, p)
+
+    #  Multi-hypothesis testing
+    #  Normalize ES and ERNull
+    NES, NESNullDistribution = normalizeES(ES, ESNullDistribution)
+    ic(NES)
+    #  Compute q-value
+    QValue = computeQValue(NES, NESNullDistribution)

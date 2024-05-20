@@ -73,7 +73,7 @@ def fetchP(PFilePath):
 def sortD(D, DNames, P, C):
     """
     This method ranks the gene set expression and the list of gene names according to a certain metric which is the
-      Fold change between two randomly picked samples from both phenotypes (in descending order). The class of
+      Fold change between two randomly picked samples from both phenotypes (in decreasing order). The class of
       distinction determines which phenotype is of interest to compute the fold change from the other phenotype to the
       one of interest.
     :param D: unranked gene set expression values
@@ -155,15 +155,13 @@ def computePValue(ES, S, D, DNames, P, C, p):
     :param p: weight of the running sum step
     :return: p-value, null distribution of the ES
     """
+    print(f"Computing P-value...")
     permutations = 1000
     ESNullDistribution = np.zeros(permutations)
     for i in range(permutations):
         PShuffled = np.random.permutation(P)
         L, LFC, LNames = sortD(D, DNames, PShuffled, C)
         ESNullDistribution[i] = computeES(S, LFC, LNames, p)
-
-        if i % 100 == 0:
-            print(f"perm: {i}")
 
     if ES >= 0:
         PValue = np.sum((ES <= ESNullDistribution)) / np.sum((0 <= ESNullDistribution))
@@ -179,10 +177,13 @@ def plotRunningSum(runningSum, xLabel, yLabel, title, ES, CName):
     plt.ylabel(yLabel)
     plt.title(title + f"| {CName}")
     plt.grid(True)
+    plt.axvline(x=np.where(runningSum == ES)[0], color = "r")
+    plt.axhline(y=ES, color="black", linestyle='--')
+
     plt.annotate(f'ES: {round(ES,4)}',
                  xy=(np.where(runningSum == ES)[0], ES),
-                 xytext=(np.where(runningSum == ES)[0], ES*1.2),  # Text position
-                 arrowprops=dict(facecolor='black', shrink=0.05))
+                 xytext=(np.where(runningSum == ES)[0]*1.2, ES/1.1),  # Text position
+                 arrowprops=dict(facecolor='black', shrink=0.01))
 
     plt.show()
 
@@ -221,8 +222,8 @@ if __name__ == '__main__':
     SDictFilePath = r"gene_Expressions_Datasets\pathways_Gene_Sets\c1.all.v2023.2.Hs.json"  # Genes expression file path
     DFilePath = r"gene_Expressions_Datasets\lymphoblastoid_Gender\Gender_collapsed_symbols.gct"  # Pathways get sets filepath
     PFilePath = r"gene_Expressions_Datasets\lymphoblastoid_Gender\Gender.cls"  # Phenotypes filepath
-    C = 0  # Class of distinction (in the alphabetic order)
-    pathway = "chr5q31"  # Pathway gene set name
+    C = 1  # Class of distinction (in the alphabetic order)
+    pathway = "chrYp11"  # Pathway gene set name
     p = 1  # Weight of step of the running sum (0 for Kolmogorov–Smirnov statistic)
     plotRS = True  # True to plot the running sum
 

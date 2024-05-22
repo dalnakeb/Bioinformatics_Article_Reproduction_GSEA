@@ -1,14 +1,9 @@
-import argparse
 import math
 import random
-import time
-from copy import copy
-
 import numpy as np
 import matplotlib.pyplot as plt
-#import plotly.express as px
 import json
-
+import pandas as pd
 
 def fetchSDict(SDictFilePath):
     """
@@ -96,7 +91,7 @@ def sortD(D, DNames, P, C):
     return L, LFC, LNames
 
 
-def computeES(S, LFC, LNames, p, plotRS=False, pathway=None, CName=None):
+def computeES(S, LFC, LNames, p, plotRS=False, pathway=None, CName=None, LE=False):
     """
     Computes the enrichment score of a pathway given a gene set expressions and a class of distinction. a high positive
       value of the enrichment score indicates an enrichment of the pathway. Whereas a low negative value indicates an
@@ -109,6 +104,7 @@ def computeES(S, LFC, LNames, p, plotRS=False, pathway=None, CName=None):
     :param plotRS: boolean to plot the running sum or not
     :param pathway: pathway name
     :param CName: name of phenotype of interest
+    :param LE: boolean to print the leading edge of the pathway gene set
     :return: ES: enrichment score
     """
     NH = len(S)  # number of genes in the pathway
@@ -140,6 +136,8 @@ def computeES(S, LFC, LNames, p, plotRS=False, pathway=None, CName=None):
 
     if plotRS:
         plotRunningSum(runningSum, "Position in L", "Running Enrichment Score", f"{pathway}", ES, CName)
+    if LE:
+        print(f"Leading Edge: {np.intersect1d(LNames, S)[0:5]}")
 
     return ES
 
@@ -153,7 +151,7 @@ def computePValue(ES, S, D, DNames, P, C, p):
     :param P: List of phenotypes
     :param C: Class of distinction
     :param p: weight of the running sum step
-    :return: p-value, null distribution of the ES
+    :return: p-value
     """
     print(f"Computing P-value...")
     permutations = 1000
@@ -168,7 +166,7 @@ def computePValue(ES, S, D, DNames, P, C, p):
     else:
         PValue = np.sum((ESNullDistribution <= ES)) / np.sum((ESNullDistribution <= 0))
 
-    return PValue, np.sort(ESNullDistribution)
+    return PValue
 
 
 def plotRunningSum(runningSum, xLabel, yLabel, title, ES, CName):
@@ -188,33 +186,58 @@ def plotRunningSum(runningSum, xLabel, yLabel, title, ES, CName):
     plt.show()
 
 
-def normalizeES(ES, ESNullDistribution):
+def plotPathwaysRanking(pathways, C, p, LFC, LNames, P, SDict):
     """
-    Normalizes the ES and the null distribution by the mean value of the null distribution
-    :param ES: Enrichment score
-    :param ESNullDistribution:  null distribution of the Es
-    :return: normalized ES and null distribution values
+    Plot the ranking of enrichment score for a given list of pathways. A P-value threshold determines the color of the
+    bar (red if P-value >0.2, green otherwise)
+    :param pathways: list of pathways
+    :param C: Class of distinction
+    :param p: Weight of step for running sum
+    :param LFC: Ranked list of fold changes of genes
+    :param LNames: Ranked list of gene names according to fold changes
+    :param P: List of phenotypes
+    :param SDict: Dictionary containing all the pathways and their associated genes
+    :return: None
     """
-    meanES = np.mean(ESNullDistribution)
-    NES = ES/meanES
-    NESNullDistribution = ESNullDistribution/meanES
+    PValues = []
+    ESs = []
+    for pathway in pathways:
+        print(pathway)
+        S = np.array(list(SDict[pathway]))  # Pathway gene set
+        random.seed(2)
+        CName = np.sort(list(set(P)))[C]  # name of phenotype of interest (class of distinction)
 
-    return NES, np.sort(NESNullDistribution)
+        # Compute the ES [optional: plot the running sum graph]
+        ES = computeES(S, LFC, LNames, p, pathway=pathway, CName=CName, LE=True)
+        ESs.append(ES)
 
+        #  Estimate significance by computing the p-value
+        PValue = computePValue(ES, S, D, DNames, P, C, p)
+        PValues.append(PValue)
 
-def computeQValue(NES, NESNullDistribution):
-    """
-    Compute the Q-value of the normalized enrichment score
-    :param NES: normalized ES
-    :param NESNullDistribution: normalized null distribution of ES
-    :return: Q-value of the NES
-    """
-    if NES >= 0:
-        QValue = np.sum((0 <= NES) & (NES <= NESNullDistribution)) / np.sum((0 <= NESNullDistribution))
-    else:
-        QValue = np.sum((NESNullDistribution <= NES) & (NES <= 0)) / np.sum((NESNullDistribution <= 0))
+    data = {
+        "Pathways": pathways,
+        "ESs": ESs,
+        "P adj <0.2": [PValue < 0.2 for PValue in PValues]
+    }
 
-    return QValue
+    df = pd.DataFrame(data)
+
+    # Set the color based on the significance
+    colors = df["P adj <0.2"].map({True: "green", False: "red"})
+
+    plt.figure(figsize=(10, 8))
+    plt.barh(df["Pathways"], df["ESs"], color=colors)
+
+    red = plt.Line2D([0], [0], color='red', lw=4, label='False')
+    green = plt.Line2D([0], [0], color='green', lw=4, label='True')
+    plt.legend(handles=[red, green], title='P adj <0.2')
+
+    plt.title(f"Gene Set Enrichment: {CName}")
+    plt.xlabel("ES")
+    plt.ylabel("Pathway")
+
+    plt.show()
 
 
 if __name__ == '__main__':
@@ -223,36 +246,32 @@ if __name__ == '__main__':
     DFilePath = r"gene_Expressions_Datasets\lymphoblastoid_Gender\Gender_collapsed_symbols.gct"  # Pathways get sets filepath
     PFilePath = r"gene_Expressions_Datasets\lymphoblastoid_Gender\Gender.cls"  # Phenotypes filepath
     C = 1  # Class of distinction (in the alphabetic order)
-    pathway = "chrYp11"  # Pathway gene set name
     p = 1  # Weight of step of the running sum (0 for Kolmogorov–Smirnov statistic)
-    plotRS = True  # True to plot the running sum
+    plotAllPathways = True
 
     # Fetch data from files
     SDict = fetchSDict(SDictFilePath)  # Dict {pathway name: gene set values}
     D, DNames = fetchD(DFilePath)  # Gene expressions set of multiple samples for each phenotype (values and names)
     P = fetchP(PFilePath)  # Phenotypes of samples in their respected order
-    S = np.array(list(SDict[pathway]))  # Pathway gene set
-    CName = np.sort(list(set(P)))[C]  # name of phenotype of interest (class of distinction)
-    print(f"Class of distinction: {CName}")
 
     random.seed(2)
     # Rank the genes set expression according to their fold change.
     L, LFC, LNames = sortD(D, DNames, P, C)  # Ranked gene set expression values, Fold changes and gene names
 
-    # Compute the ES [optional: plot the running sum graph]
-    ES = computeES(S, LFC, LNames, p, plotRS=plotRS, pathway=pathway, CName=CName)
-    print(f"ES: {ES}")
+    if not plotAllPathways:
+        pathway = "chrXp11"  # Pathway gene set name
+        S = np.array(list(SDict[pathway]))  # Pathway gene set
+        CName = np.sort(list(set(P)))[C]  # name of phenotype of interest (class of distinction)
+        print(f"Class of distinction: {CName}")
+        # Compute the ES [optional: plot the running sum graph]
+        ES = computeES(S, LFC, LNames, p, plotRS=True, pathway=pathway, CName=CName, LE=True)
+        print(f"ES: {ES}")
 
-    #  Estimate significance by computing the p-value
-    PValue, ESNullDistribution = computePValue(ES, S, D, DNames, P, C, p)
-    print(f"PValue: {PValue}")
-
-    #  Multi-hypothesis testing
-    #  Normalize ES and ERNull
-    NES, NESNullDistribution = normalizeES(ES, ESNullDistribution)
-    print(f"NES: {NES}")
-    #  Compute q-value
-    QValue = computeQValue(NES, NESNullDistribution)
-    print(f"QValue: {QValue}")
-
+        #  Estimate significance by computing the p-value
+        PValue = computePValue(ES, S, D, DNames, P, C, p)
+        print(f"PValue: {PValue}")
+    else:
+        # Plot the ranking of the list of given pathways
+        pathways = ["chrYp11", "chrXp21", "chrYq11", "chrXq13", "chrXp11", "chrXp22", "chrXq11", "chrXq12"]
+        plotPathwaysRanking(pathways, C, p, LFC, LNames, P, SDict)
 

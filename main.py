@@ -242,10 +242,14 @@ def plotPathwaysRanking(pathways, C, p, LFC, LNames, P, SDict):
 
 if __name__ == '__main__':
     # Input
-    SDictFilePath = r"gene_Expressions_Datasets\pathways_Gene_Sets\c1.all.v2023.2.Hs.json"  # Genes expression file path
-    DFilePath = r"gene_Expressions_Datasets\lymphoblastoid_Gender\Gender_collapsed_symbols.gct"  # Pathways get sets filepath
-    PFilePath = r"gene_Expressions_Datasets\lymphoblastoid_Gender\Gender.cls"  # Phenotypes filepath
-    C = 1  # Class of distinction (in the alphabetic order)
+    SDictFilePath = r"gene_Expressions_Datasets\pathways_Gene_Sets\c2.all.v2023.2.Hs.json"  # Genes expression file path
+#    DFilePath = r"gene_Expressions_Datasets\lymphoblastoid_Gender\Gender_collapsed_symbols.gct"  # Pathways get sets filepath
+ #   PFilePath = r"gene_Expressions_Datasets\lymphoblastoid_Gender\Gender.cls"  # Phenotypes filepath
+
+    DFilePath = r"gene_Expressions_Datasets\diabetes\Diabetes_collapsed_symbols.gct"  # Pathways get sets filepath
+    PFilePath = r"gene_Expressions_Datasets\diabetes\Diabetes.cls"  # Phenotypes filepath
+
+    C = 0  # Class of distinction (in the alphabetic order)
     p = 1  # Weight of step of the running sum (0 for Kolmogorov–Smirnov statistic)
     plotAllPathways = True
 
@@ -272,6 +276,9 @@ if __name__ == '__main__':
         print(f"PValue: {PValue}")
     else:
         # Plot the ranking of the list of given pathways
-        pathways = ["chrYp11", "chrXp21", "chrYq11", "chrXq13", "chrXp11", "chrXp22", "chrXq11", "chrXq12"]
+        #pathways = ["chrYp11", "chrXp21", "chrYq11", "chrXq13", "chrXp11", "chrXp22", "chrXq11", "chrXq12"]
+        pathways = ["REACTOME_INSULIN_PROCESSING", "REACTOME_INSULIN_RECEPTOR_RECYCLING", "REACTOME_INSULIN_RECEPTOR_SIGNALLING_CASCADE",
+                    "REACTOME_REGULATION_OF_INSULIN_SECRETION"]
+
         plotPathwaysRanking(pathways, C, p, LFC, LNames, P, SDict)
 

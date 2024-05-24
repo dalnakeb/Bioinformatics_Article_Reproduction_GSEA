@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import json
 import pandas as pd
+import statsmodels.stats.multitest as multitest
 
 def fetchSDict(SDictFilePath):
     """
@@ -215,16 +216,26 @@ def plotPathwaysRanking(pathways, C, p, LFC, LNames, P, SDict):
         PValue = computePValue(ES, S, D, DNames, P, C, p)
         PValues.append(PValue)
 
+    # adjust p-value according to the Benjamini-Hochberg procedure
+    adjPValues = multitest.multipletests(PValues, alpha=0.02, method='fdr_bh')[1]
+
+    ESs = np.array(ESs)
+    pathways = np.array(pathways)
+    indices = np.argsort(ESs)
+    ESs = ESs[indices][::-1]
+    pathways = pathways[indices][::-1]
+    adjPValues = adjPValues[indices][::-1]
+
     data = {
         "Pathways": pathways,
         "ESs": ESs,
-        "P adj <0.2": [PValue < 0.2 for PValue in PValues]
+        "P-value adj < 0.2": [PValue < 0.2 for PValue in adjPValues]
     }
 
     df = pd.DataFrame(data)
 
     # Set the color based on the significance
-    colors = df["P adj <0.2"].map({True: "green", False: "red"})
+    colors = df["P-value adj < 0.2"].map({True: "green", False: "red"})
 
     plt.figure(figsize=(10, 8))
     plt.barh(df["Pathways"], df["ESs"], color=colors)
@@ -242,12 +253,9 @@ def plotPathwaysRanking(pathways, C, p, LFC, LNames, P, SDict):
 
 if __name__ == '__main__':
     # Input
-    SDictFilePath = r"gene_Expressions_Datasets\pathways_Gene_Sets\c2.all.v2023.2.Hs.json"  # Genes expression file path
-#    DFilePath = r"gene_Expressions_Datasets\lymphoblastoid_Gender\Gender_collapsed_symbols.gct"  # Pathways get sets filepath
- #   PFilePath = r"gene_Expressions_Datasets\lymphoblastoid_Gender\Gender.cls"  # Phenotypes filepath
-
-    DFilePath = r"gene_Expressions_Datasets\diabetes\Diabetes_collapsed_symbols.gct"  # Pathways get sets filepath
-    PFilePath = r"gene_Expressions_Datasets\diabetes\Diabetes.cls"  # Phenotypes filepath
+    SDictFilePath = r"gene_Expressions_Datasets\pathways_Gene_Sets\c1.all.v2023.2.Hs.json"  # Genes expression file path
+    DFilePath = r"gene_Expressions_Datasets\lymphoblastoid_Gender\Gender_collapsed_symbols.gct"  # Pathways get sets filepath
+    PFilePath = r"gene_Expressions_Datasets\lymphoblastoid_Gender\Gender.cls"  # Phenotypes filepath
 
     C = 0  # Class of distinction (in the alphabetic order)
     p = 1  # Weight of step of the running sum (0 for Kolmogorov–Smirnov statistic)
@@ -262,7 +270,7 @@ if __name__ == '__main__':
     # Rank the genes set expression according to their fold change.
     L, LFC, LNames = sortD(D, DNames, P, C)  # Ranked gene set expression values, Fold changes and gene names
 
-    if not plotAllPathways:
+    if not plotAllPathways:  # compute ES and p-value for a specific pathway
         pathway = "chrXp11"  # Pathway gene set name
         S = np.array(list(SDict[pathway]))  # Pathway gene set
         CName = np.sort(list(set(P)))[C]  # name of phenotype of interest (class of distinction)
@@ -274,11 +282,9 @@ if __name__ == '__main__':
         #  Estimate significance by computing the p-value
         PValue = computePValue(ES, S, D, DNames, P, C, p)
         print(f"PValue: {PValue}")
-    else:
+    else:  # plot
         # Plot the ranking of the list of given pathways
-        #pathways = ["chrYp11", "chrXp21", "chrYq11", "chrXq13", "chrXp11", "chrXp22", "chrXq11", "chrXq12"]
-        pathways = ["REACTOME_INSULIN_PROCESSING", "REACTOME_INSULIN_RECEPTOR_RECYCLING", "REACTOME_INSULIN_RECEPTOR_SIGNALLING_CASCADE",
-                    "REACTOME_REGULATION_OF_INSULIN_SECRETION"]
+        pathways = ["chrYp11", "chrXp21", "chrYq11", "chrXq13", "chrXp11", "chrXp22", "chrXq11", "chrXq12"]
 
         plotPathwaysRanking(pathways, C, p, LFC, LNames, P, SDict)
 

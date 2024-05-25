@@ -256,15 +256,16 @@ if __name__ == '__main__':
     SDictFilePath = r"gene_Expressions_Datasets\pathways_Gene_Sets\c1.all.v2023.2.Hs.json"  # Genes expression file path
     DFilePath = r"gene_Expressions_Datasets\lymphoblastoid_Gender\Gender_collapsed_symbols.gct"  # Pathways get sets filepath
     PFilePath = r"gene_Expressions_Datasets\lymphoblastoid_Gender\Gender.cls"  # Phenotypes filepath
-
     C = 0  # Class of distinction (in the alphabetic order)
     p = 1  # Weight of step of the running sum (0 for Kolmogorov–Smirnov statistic)
-    plotAllPathways = True
+    plotAllPathways = False
 
     # Fetch data from files
     SDict = fetchSDict(SDictFilePath)  # Dict {pathway name: gene set values}
     D, DNames = fetchD(DFilePath)  # Gene expressions set of multiple samples for each phenotype (values and names)
     P = fetchP(PFilePath)  # Phenotypes of samples in their respected order
+    CName = np.sort(list(set(P)))[C]  # name of phenotype of interest (class of distinction)
+    print(f"Class of distinction: {CName}")
 
     random.seed(2)
     # Rank the genes set expression according to their fold change.
@@ -273,8 +274,7 @@ if __name__ == '__main__':
     if not plotAllPathways:  # compute ES and p-value for a specific pathway
         pathway = "chrXp11"  # Pathway gene set name
         S = np.array(list(SDict[pathway]))  # Pathway gene set
-        CName = np.sort(list(set(P)))[C]  # name of phenotype of interest (class of distinction)
-        print(f"Class of distinction: {CName}")
+
         # Compute the ES [optional: plot the running sum graph]
         ES = computeES(S, LFC, LNames, p, plotRS=True, pathway=pathway, CName=CName, LE=True)
         print(f"ES: {ES}")
